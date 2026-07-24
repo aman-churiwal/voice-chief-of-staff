@@ -10,7 +10,7 @@ Try:
     - "What's on my calendar today?"
     - "Reschedule my 3pm to tomorrow at the same time"
     - "Do I have any unread email from Sam?"
-    - "Draft a reply to Sam saying I can do 4pm tomorrow"
+    - "Draft a reply to Aman saying I can do 4pm tomorrow"
 """
 import asyncio
 
