@@ -94,3 +94,71 @@ def update_event(service, calendar_id: str, event_id: str, updates: dict) -> dic
         .patch(calendarId=calendar_id, eventId=event_id, body=updates)
         .execute()
     )
+
+
+def find_event_by_idempotency_key(
+    service, calendar_id: str, idempotency_key: str
+) -> dict | None:
+    """Look up an event previously created with a given idempotency key.
+
+    Args:
+        service: An authenticated Calendar API service object.
+        calendar_id: Calendar to search.
+        idempotency_key: The idempotency key passed to a prior
+            create_event_idempotent call.
+
+    Returns:
+        The matching event dict if one exists, else None.
+    """
+    response = (
+        service.events()
+        .list(
+            calendarId=calendar_id,
+            privateExtendedProperty=f"vcos_idempotency_key={idempotency_key}",
+            maxResults=1,
+        )
+        .execute()
+    )
+    items = response.get("items", [])
+    return items[0] if items else None
+
+
+def create_event_idempotent(
+    service,
+    calendar_id: str,
+    summary: str,
+    start_iso: str,
+    end_iso: str,
+    idempotency_key: str,
+    attendee_emails: list[str] | None = None,
+) -> dict:
+    """Creates a calendar event, or returns the existing one if this
+    idempotency_key was already used - safe to call repeatedly on retry.
+
+    Args:
+        service: An authenticated Calendar API service object.
+        calendar_id: Calendar to create the event on.
+        summary: Event title.
+        start_iso: RFC3339 start timestamp.
+        end_iso: RFC3339 end timestamp.
+        idempotency_key: A caller-generated unique key (e.g. a UUID) that
+            identifies this specific creation request across retries.
+        attendee_emails: Optional list of attendee email addresses to invite.
+
+    Returns:
+        The created (or previously-created) event dict.
+    """
+    existing = find_event_by_idempotency_key(service, calendar_id, idempotency_key)
+    if existing:
+        return existing
+
+    body = {
+        "summary": summary,
+        "start": {"dateTime": start_iso},
+        "end": {"dateTime": end_iso},
+        "privateExtendedProperties": {"private": {"vcos_idempotency_key": idempotency_key}},
+    }
+    if attendee_emails:
+        body["attendees"] = [{"email": email} for email in attendee_emails]  #type: ignore[attr-defined]
+
+    return service.events().insert(calendarId=calendar_id, body=body).execute()
